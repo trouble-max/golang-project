@@ -2,13 +2,41 @@ package main
 
 import (
 	"fmt"
-	"gourmetspices.yerassyl.net/internal/data"
+	"gourmetspices.yerassyl.net/internal/validator"
 	"net/http"
 	"time"
+
+	"gourmetspices.yerassyl.net/internal/data"
 )
 
 func (app *application) createHerbHandler(w http.ResponseWriter, r *http.Request) {
-	fmt.Fprintln(w, "create a new herb")
+	var input struct {
+		Name         string     `json:"name"`
+		Description  string     `json:"description"`
+		Price        data.Price `json:"price"`
+		CulinaryUses []string   `json:"culinary_uses"`
+	}
+
+	err := app.readJSON(w, r, &input)
+	if err != nil {
+		app.badRequestResponse(w, r, err)
+		return
+	}
+
+	herb := &data.Herb{
+		Name:         input.Name,
+		Description:  input.Description,
+		Price:        input.Price,
+		CulinaryUses: input.CulinaryUses,
+	}
+
+	v := validator.New()
+
+	if data.ValidateHerb(v, herb); !v.Valid() {
+		app.failedValidationResponse(w, r, v.Errors)
+		return
+	}
+	fmt.Fprintf(w, "%+v\n", input)
 }
 
 func (app *application) showHerbHandler(w http.ResponseWriter, r *http.Request) {
