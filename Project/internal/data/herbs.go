@@ -1,6 +1,7 @@
 package data
 
 import (
+	"context"
 	"database/sql"
 	"errors"
 	"github.com/lib/pq"
@@ -53,7 +54,10 @@ func (h HerbModel) Insert(herb *Herb) error {
 		pq.Array(herb.CulinaryUses),
 	}
 
-	return h.DB.QueryRow(query, args...).Scan(
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+
+	return h.DB.QueryRowContext(ctx, query, args...).Scan(
 		&herb.ID,
 		&herb.CreatedAt,
 		&herb.Version,
@@ -71,7 +75,10 @@ func (h HerbModel) Get(id int64) (*Herb, error) {
 
 	var herb Herb
 
-	err := h.DB.QueryRow(query, id).Scan(
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+
+	err := h.DB.QueryRowContext(ctx, query, id).Scan(
 		&herb.ID,
 		&herb.CreatedAt,
 		&herb.Name,
@@ -98,7 +105,7 @@ func (h HerbModel) Update(herb *Herb) error {
 
 	query := `UPDATE herbs
 		SET name = $1, description = $2, price = $3, culinary_uses = $4, version = version + 1
-		WHERE id = $5
+		WHERE id = $5 AND version = $6
 		RETURNING version`
 
 	args := []interface{}{
@@ -107,9 +114,23 @@ func (h HerbModel) Update(herb *Herb) error {
 		herb.Price,
 		pq.Array(herb.CulinaryUses),
 		herb.ID,
+		herb.Version,
 	}
 
-	return h.DB.QueryRow(query, args...).Scan(&herb.Version)
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+
+	err := h.DB.QueryRowContext(ctx, query, args...).Scan(&herb.Version)
+	if err != nil {
+		switch {
+		case errors.Is(err, sql.ErrNoRows):
+			return ErrEditConflict
+		default:
+			return err
+		}
+	}
+
+	return nil
 }
 
 func (h HerbModel) Delete(id int64) error {
@@ -121,7 +142,10 @@ func (h HerbModel) Delete(id int64) error {
 	query := `DELETE FROM herbs
 		WHERE id = $1`
 
-	result, err := h.DB.Exec(query, id)
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+
+	result, err := h.DB.ExecContext(ctx, query, id)
 	if err != nil {
 		return err
 	}

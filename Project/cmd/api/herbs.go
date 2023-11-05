@@ -97,10 +97,10 @@ func (app *application) updateHerbHandler(w http.ResponseWriter, r *http.Request
 	}
 
 	var input struct {
-		Name         string     `json:"name"`
-		Description  string     `json:"description"`
-		Price        data.Price `json:"price"`
-		CulinaryUses []string   `json:"culinary_uses"`
+		Name         *string     `json:"name"`
+		Description  *string     `json:"description"`
+		Price        *data.Price `json:"price"`
+		CulinaryUses []string    `json:"culinary_uses"`
 	}
 
 	err = app.readJSON(w, r, &input)
@@ -109,10 +109,18 @@ func (app *application) updateHerbHandler(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	herb.Name = input.Name
-	herb.Description = input.Description
-	herb.Price = input.Price
-	herb.CulinaryUses = input.CulinaryUses
+	if input.Name != nil {
+		herb.Name = *input.Name
+	}
+	if input.Description != nil {
+		herb.Description = *input.Description
+	}
+	if input.Price != nil {
+		herb.Price = *input.Price
+	}
+	if input.CulinaryUses != nil {
+		herb.CulinaryUses = input.CulinaryUses
+	}
 
 	v := validator.New()
 	if data.ValidateHerb(v, herb); !v.Valid() {
@@ -122,7 +130,12 @@ func (app *application) updateHerbHandler(w http.ResponseWriter, r *http.Request
 
 	err = app.models.Herbs.Update(herb)
 	if err != nil {
-		app.serverErrorResponse(w, r, err)
+		switch {
+		case errors.Is(err, data.ErrEditConflict):
+			app.editConflictResponse(w, r)
+		default:
+			app.serverErrorResponse(w, r, err)
+		}
 		return
 	}
 
